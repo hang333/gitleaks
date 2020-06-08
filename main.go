@@ -1,97 +1,97 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
+	"io/ioutil"
 	"os"
-	"regexp"
-	"strings"
+	"time"
+
+	"github.com/zricethezav/gitleaks/v4/audit"
+	"github.com/zricethezav/gitleaks/v4/config"
+	"github.com/zricethezav/gitleaks/v4/hosts"
+	"github.com/zricethezav/gitleaks/v4/manager"
+	"github.com/zricethezav/gitleaks/v4/options"
+
+	"github.com/hako/durafmt"
+	log "github.com/sirupsen/logrus"
 )
-
-var (
-	appRoot     string
-	regexes     map[string]*regexp.Regexp
-	stopWords   []string
-	base64Chars string
-	hexChars    string
-	opts        *Options
-	assignRegex *regexp.Regexp
-)
-
-// RepoElem used for parsing json from github api
-type RepoElem struct {
-	RepoURL string `json:"html_url"`
-}
-
-func init() {
-	var (
-		err error
-	)
-
-	appRoot, err = os.Getwd()
-	if err != nil {
-		log.Fatalf("Can't get working dir: %s", err)
-	}
-	base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
-	hexChars = "1234567890abcdefABCDEF"
-
-	stopWords = []string{"setting", "Setting", "SETTING", "info",
-		"Info", "INFO", "env", "Env", "ENV", "environment", "Environment", "ENVIRONMENT"}
-
-	regexes = map[string]*regexp.Regexp{
-		"RSA":      regexp.MustCompile("-----BEGIN RSA PRIVATE KEY-----"),
-		"SSH":      regexp.MustCompile("-----BEGIN OPENSSH PRIVATE KEY-----"),
-		"Facebook": regexp.MustCompile("(?i)facebook.*['|\"][0-9a-f]{32}['|\"]"),
-		"Twitter":  regexp.MustCompile("(?i)twitter.*['|\"][0-9a-zA-Z]{35,44}['|\"]"),
-		"Github":   regexp.MustCompile("(?i)github.*[['|\"]0-9a-zA-Z]{35,40}['|\"]"),
-		"AWS":      regexp.MustCompile("AKIA[0-9A-Z]{16}"),
-		"Reddit":   regexp.MustCompile("(?i)reddit.*['|\"][0-9a-zA-Z]{14}['|\"]"),
-		"Heroku":   regexp.MustCompile("(?i)heroku.*[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}"),
-		// "Custom": regexp.MustCompile(".*")
-	}
-	assignRegex = regexp.MustCompile(`(=|:|:=|<-)`)
-}
 
 func main() {
-	args := os.Args[1:]
-	opts = parseOptions(args)
-	if opts.RepoURL != "" {
-		start(opts)
-	} else if opts.UserURL != "" || opts.OrgURL != "" {
-		repoList := repoScan(opts)
-		for _, repo := range repoList {
-			opts.RepoURL = repo.RepoURL
-			start(opts)
+	opts, err := options.ParseOptions()
+	if err != nil {
+		log.Error(err)
+		os.Exit(options.ErrorEncountered)
+	}
+
+	err = opts.Guard()
+	if err != nil {
+		log.Error(err)
+		os.Exit(options.ErrorEncountered)
+	}
+
+	cfg, err := config.NewConfig(opts)
+	if err != nil {
+		log.Error(err)
+		os.Exit(options.ErrorEncountered)
+	}
+
+	m, err := manager.NewManager(opts, cfg)
+	if err != nil {
+		log.Error(err)
+		os.Exit(options.ErrorEncountered)
+	}
+
+	err = Run(m)
+	if err != nil {
+		log.Error(err)
+		os.Exit(options.ErrorEncountered)
+	}
+
+	leaks := m.GetLeaks()
+	metadata := m.GetMetadata()
+
+	if len(m.GetLeaks()) != 0 {
+		if m.Opts.CheckUncommitted() {
+			log.Warnf("%d leaks detected in staged changes", len(leaks))
+		} else {
+			log.Warnf("%d leaks detected. %d commits audited in %s", len(leaks),
+				metadata.Commits, durafmt.Parse(time.Duration(metadata.AuditTime)*time.Nanosecond))
 		}
+		os.Exit(options.LeaksPresent)
+	} else {
+		if m.Opts.CheckUncommitted() {
+			log.Infof("No leaks detected in staged changes")
+		} else {
+			log.Infof("No leaks detected. %d commits audited in %s",
+				metadata.Commits, durafmt.Parse(time.Duration(metadata.AuditTime)*time.Nanosecond))
+		}
+		os.Exit(options.Success)
 	}
 }
 
-// repoScan attempts to parse all repo urls from an organization or user
-func repoScan(opts *Options) []RepoElem {
-	var (
-		targetURL  string
-		target     string
-		targetType string
-		repoList   []RepoElem
-	)
+// Run begins the program and contains some basic logic on how to continue with the audit. If any external git host
+// options are set (like auditing a gitlab or github user) then a specific host client will be created and
+// then Audit() and Report() will be called. Otherwise, gitleaks will create a new repo and an audit will proceed.
+// If no options or the uncommitted option is set then a pre-commit audit will
+// take place -- this is similar to running `git diff` on all the tracked files.
+func Run(m *manager.Manager) error {
+	if m.Opts.Disk {
+		dir, err := ioutil.TempDir("", "gitleaks")
+		defer os.RemoveAll(dir)
+		if err != nil {
+			return err
+		}
+		m.CloneDir = dir
+	}
 
-	if opts.UserURL != "" {
-		targetURL = opts.UserURL
-		targetType = "users"
+	var err error
+	if m.Opts.Host != "" {
+		err = hosts.Run(m)
 	} else {
-		targetURL = opts.OrgURL
-		targetType = "orgs"
+		err = audit.Run(m)
 	}
-	splitTargetURL := strings.Split(targetURL, "/")
-	target = splitTargetURL[len(splitTargetURL)-1]
-
-	resp, err := http.Get(fmt.Sprintf("https://api.github.com/%s/%s/repos", targetType, target))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	defer resp.Body.Close()
-	json.NewDecoder(resp.Body).Decode(&repoList)
-	return repoList
+
+	return m.Report()
 }

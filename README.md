@@ -1,72 +1,39 @@
-# GitLeaks
+<p align="center">
+  <img alt="gitleaks" src="https://raw.githubusercontent.com/zricethezav/gifs/master/gitleakslogo.png" height="70" />
+  <p align="center">
+      <a href="https://travis-ci.org/zricethezav/gitleaks"><img alt="Travis" src="https://img.shields.io/travis/zricethezav/gitleaks/master.svg?style=flat-square"></a>
+  </p>
+</p>
+
+Gitleaks is a SAST tool for detecting hardcoded secrets like passwords, api keys, and tokens in git repos. Gitleaks aims to be the **easy-to-use, all-in-one solution** for finding secrets, past or present, in your code. 
+ 
+### Features:
+- Scans for [commited](https://github.com/zricethezav/gitleaks/wiki/Scanning) secrets
+- Scans for [uncommitted](https://github.com/zricethezav/gitleaks/wiki/Scanning#uncommitted-changes-scan) secrets as part of shifting security left
+- Available [Github Action](https://github.com/marketplace/actions/gitleaks)
+- Gitlab and Github API support which allows scans of whole organizations, users, and pull/merge requests
+- [Custom rules](https://github.com/zricethezav/gitleaks/wiki/Configuration) via toml configuration
+- High performance using [go-git](https://github.com/go-git/go-git)
+- JSON and CSV reporting
+- Private repo scans using key or password based authentication
 
 
-[![Build Status](https://travis-ci.org/zricethezav/gitleaks.svg?branch=master)](https://travis-ci.org/zricethezav/gitleaks)
-
-## Check git repos for secrets and keys
-
-### Features
-
-* Search all commits on all branches in topological order
-* Regex/Entropy checks
-
-#### Installing
-
-```bash
-go get -u github.com/zricethezav/gitleaks
-```
-
-#### Usage and Explanation
-
-![Alt Text](https://github.com/zricethezav/gifs/blob/master/gitleaks.gif)
-
-```bash
-./gitleaks {git url}
-```
-
-This example will clone the target `{git url}` and run a diff on all commits. A report will be outputted to `{repo_name}_leaks.json`
-Gitleaks scans all lines of all commits and checks if there are any regular expression matches. The regexs are defined in `main.go`. Work largely based on  [https://people.eecs.berkeley.edu/~rohanpadhye/files/key_leaks-msr15.pdf](https://people.eecs.berkeley.edu/~rohanpadhye/files/key_leaks-msr15.pdf) and regexes from https://github.com/dxa4481/truffleHog and https://github.com/anshumanbh/git-all-secrets.
-
-##### gitLeaks User
-```bash
-./gitleaks -u {user git url}
-```
-##### gitLeaks Org
-```bash
-./gitleaks -o {org git url}
-```
-
-#### Help
-```
-usage: gitleaks [options] <url>
-
-Options:
- -c                     Concurrency factor (default is 10)
- -u --user              Git user url
- -r --repo              Git repo url
- -o --org               Git organization url
- -s --since             Scan until this commit (SHA)
- -b --b64Entropy        Base64 entropy cutoff (default is 70)
- -x --hexEntropy        Hex entropy cutoff (default is 40)
- -e --entropy           Enable entropy
- --strict               Enables stopwords
- -h --help              Display this message
-```
-NOTE: your mileage may vary so if you aren't getting the results you expected try updating the regexes to fit your needs or try tweaking the entropy cutoffs and stopwords. Entropy cutoff for base64 alphabets seemed to give good results around 70 and hex alphabets seemed to give good results around 40. Entropy is calculated using [Shannon entropy](http://www.bearcave.com/misl/misl_tech/wavelets/compression/shannon.html).
+## Installation, Documentation and Examples
+This project is documented [here](https://github.com/zricethezav/gitleaks/wiki)
 
 
-### If you find a valid leak in a repo
-Please read the [Github article on removing sensitive data from a repository](https://help.github.com/articles/removing-sensitive-data-from-a-repository/) to remove the sensitive information from your history.
+###  Sponsors ❤️
+#### Corporate Sponsors
+[![gammanet](https://gammanet.com/assets/images/new-design/gamma-logo.png)](https://gammanet.com/?utm_source=gitleaks&utm_medium=homepage&utm_campaign=gitleaks_promotion)
 
-### Run me with docker
+Gamma proactively detects and remediates data leaks across cloud apps. Scan your public repos for secret leaks with [Gamma](https://gammanet.com/github-demo?utm_source=gitleaks&utm_medium=homepage&utm_campaign=gitleaks_promotion)
 
-Simply run `docker run --rm --name=gitleaks raphaelareya/gitleaks https://github.com/zricethezav/gitleaks`
+#### Individual Sponsors 
+These users are [sponsors](https://github.com/sponsors/zricethezav) of gitleaks:
 
-Or build the image yourself to get the latest version :
-
-```
-docker build -t gitleaks .
-docker run --rm --name=gitleaks gitleaks https://github.com/zricethezav/gitleaks
-```
-
+[![Adam Shannon](https://github.com/adamdecaf.png?size=50)](https://github.com/adamdecaf) | [![Granville Schmidt](https://github.com/gramidt.png?size=50)](https://github.com/gramidt) | 
+---|---|
+----
+#### Logo Attribution
+The Gitleaks logo uses the Git Logo created <a href="https://twitter.com/jasonlong">Jason Long</a> is licensed under the <a href="https://creativecommons.org/licenses/by/3.0/">Creative Commons Attribution 3.0 Unported License</a>.
 

@@ -1,7 +1,8 @@
 language: go
-go: 
-    - 1.9
-
+go:
+- 1.13.x
+services:
+- docker
 script:
-    - go test -v
-
+- make test
+- make security-scan
